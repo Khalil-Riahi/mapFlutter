@@ -44,7 +44,7 @@ export default function FloorPlanSVG({onTableClick}){
                 console.log(`Table ${id} is reserved. Cannot click.`);
                 toast.warn(`Table ${id} is reserved. Cannot Reserve.`);
 
-                return; // ❌ If reserved, do nothing
+                return; 
               }
               // ✅ Otherwise, allow click
               onTableClick(id);

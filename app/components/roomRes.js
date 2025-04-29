@@ -30,6 +30,13 @@ export default function ReserveRoom({
   console.log("hhh")
   console.log(initialTimeRange)
 
+  const des = [
+    "7/7 Access",
+    "Wi-Fi",
+    "Coffee (extra)",
+    "printer"
+  ]
+
   const [selectedDate, setSelectedDate] = useState(
     Datecalender ? new Date(Datecalender) : null
   );
@@ -137,10 +144,24 @@ export default function ReserveRoom({
   };
 
 
-  const getAvailableTimeSlots = () => {
+//   const getAvailableTimeSlots = () => {
+//     const allSlots = generateTimeSlots();
+//     const reservationsForDay = getReservationsForSelectedDate();
+//     return allSlots.filter((slot) => !isTimeSlotReserved(slot, reservationsForDay));
+//   };
+
+const getAvailableTimeSlots = () => {
     const allSlots = generateTimeSlots();
     const reservationsForDay = getReservationsForSelectedDate();
-    return allSlots.filter((slot) => !isTimeSlotReserved(slot, reservationsForDay));
+    
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  
+    return allSlots.filter((slot) => {
+      const [h, m] = slot.split(":").map(Number);
+      const slotMinutes = h * 60 + m;
+      return slotMinutes >= nowMinutes && !isTimeSlotReserved(slot, reservationsForDay);
+    });
   };
 
   // ---------------------
@@ -148,23 +169,99 @@ export default function ReserveRoom({
   // They must be at least 60 minutes after the chosen Check-in time.
   // Then, if midnight qualifies, append "24:00" (instead of "00:00") as the last option.
   // ---------------------
-  const getValidDepartureTimes = (checkInStr) => {
+//   const getValidDepartureTimes = (checkInStr) => {
+//     if (!checkInStr) return [];
+//     const checkInMin = toMinutes(checkInStr);
+//     let validSlots = getAvailableTimeSlots().filter((slot) => {
+//       return toMinutes(slot) - checkInMin >= 60;
+//     });
+//     // If the gap from check-in to midnight (1440 minutes) is at least 60, include "24:00"
+//     if (1440 - checkInMin >= 60) {
+//       if (!validSlots.includes("24:00")) {
+//         validSlots.push("24:00");
+//       }
+//     }
+//     validSlots.sort((a, b) => {
+//       const aMin = a === "24:00" ? 1440 : toMinutes(a);
+//       const bMin = b === "24:00" ? 1440 : toMinutes(b);
+//       return aMin - bMin;
+//     });
+//     return validSlots;
+//   };
+
+// const getValidDepartureTimes = (checkInStr) => {
+//     if (!checkInStr) return [];
+  
+//     const checkInMin = toMinutes(checkInStr);
+//     const reservationsForDay = getReservationsForSelectedDate();
+  
+//     const availableSlots = generateTimeSlots()
+//       .filter((slot) => toMinutes(slot) > checkInMin)
+//       .sort((a, b) => toMinutes(a) - toMinutes(b));
+  
+//     const validSlots = [];
+  
+//     for (const slot of availableSlots) {
+//       const slotMin = toMinutes(slot);
+//       const conflict = reservationsForDay.some(({ check_in, check_out }) => {
+//         const resStart = toMinutes(check_in);
+//         const resEnd = toMinutes(check_out);
+//         // conflict if the next slot overlaps with any reservation
+//         return slotMin >= resStart && slotMin < resEnd;
+//       });
+  
+//       if (conflict) {
+//         // stop here, cannot go into conflicting reservation
+//         break;
+//       }
+  
+//       // if gap is ok (at least 60 min from check-in)
+//       if (slotMin - checkInMin >= 30) { 
+//         validSlots.push(slot);
+//       }
+//     }
+  
+//     // Optional: If check-in time is far enough from midnight, allow 24:00
+//     if (1440 - checkInMin >= 60 && !validSlots.includes("24:00")) {
+//       validSlots.push("24:00");
+//     }
+  
+//     return validSlots;
+//   };
+
+const getValidDepartureTimes = (checkInStr) => {
     if (!checkInStr) return [];
+    
     const checkInMin = toMinutes(checkInStr);
-    let validSlots = getAvailableTimeSlots().filter((slot) => {
-      return toMinutes(slot) - checkInMin >= 60;
+    const allSlots = generateTimeSlots();
+    const reservationsForDay = getReservationsForSelectedDate();
+  
+    // Find the nearest conflicting reservation AFTER the check-in time
+    const nextReservationMin = reservationsForDay
+      .map((res) => toMinutes(res.check_in))
+      .filter((startMin) => startMin > checkInMin)
+      .sort((a, b) => a - b)[0]; // get the soonest one
+    
+    let validSlots = allSlots.filter((slot) => {
+      const slotMin = toMinutes(slot);
+      if (slotMin <= checkInMin) return false; // Must be after check-in
+      if (nextReservationMin !== undefined && slotMin >= nextReservationMin) return false; // Must be before the next reservation
+      return true;
     });
-    // If the gap from check-in to midnight (1440 minutes) is at least 60, include "24:00"
-    if (1440 - checkInMin >= 60) {
+  
+    // Special case: if the gap between check-in and midnight (24:00) is allowed
+    if (!nextReservationMin && 1440 - checkInMin >= 60) {
       if (!validSlots.includes("24:00")) {
         validSlots.push("24:00");
       }
     }
+  
     validSlots.sort((a, b) => {
       const aMin = a === "24:00" ? 1440 : toMinutes(a);
       const bMin = b === "24:00" ? 1440 : toMinutes(b);
       return aMin - bMin;
     });
+  
     return validSlots;
   };
 
@@ -250,14 +347,21 @@ export default function ReserveRoom({
         ? new Date("1970-01-02T00:00:00")
         : new Date(`1970-01-01T${endStr}:00`);
     const diffInHours = (end - start) / 1000 / 60 / 60;
-    if (diffInHours === 2) {
-      return room.prices.find((p) => p.duration === "2h")?.price;
-    } else if (diffInHours === 5) {
-      return room.prices.find((p) => p.duration === "1/2 Day (5h)")?.price ;
-    } else {
-      const hourlyPrice = room.prices.find((p) => p.duration === "1h")?.price;
-      return diffInHours * hourlyPrice;
+    if(room.numTable === 34 || room.numTable === 33){
+        if (diffInHours === 2) {
+            return room.prices.find((p) => p.duration === "2h")?.price;
+          } else if (diffInHours === 5) {
+            return room.prices.find((p) => p.duration === "1/2 Day (5h)")?.price ;
+          } else {
+            const hourlyPrice = room.prices.find((p) => p.duration === "1h")?.price;
+            return diffInHours * hourlyPrice;
+          }
+    }if(room.numTable === 31 || room.numTable === 32){
+        return diffInHours * 5
+    }else{
+        return diffInHours * 1.5
     }
+   
   };
 
   useEffect(() => {
@@ -455,7 +559,11 @@ export default function ReserveRoom({
             </h2>
             <p className="text-black text-md mt-1 text-left">{room.Name}</p>
             <div className="flex flex-wrap gap-2 mb-2">
-              {room.description && room.description.map((feature, idx) => (
+              {room?.description && room?.description.length != 0 ? room.description.map((feature, idx) => (
+                <span key={idx} className="bg-gray-100 text-xs px-2 py-1 rounded-md">
+                  {feature}
+                </span>
+              )) : des.map((feature, idx) => (
                 <span key={idx} className="bg-gray-100 text-xs px-2 py-1 rounded-md">
                   {feature}
                 </span>
